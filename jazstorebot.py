@@ -1,0 +1,235 @@
+from telegram import (
+    Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
+)
+from telegram.ext import (
+    ApplicationBuilder, CommandHandler, CallbackQueryHandler,
+    MessageHandler, ContextTypes, filters
+)
+import asyncio, random, datetime, json, os
+
+# 🔒 TOKEN-и худро гузоред
+TOKEN = "8238563485:AAHNLTZodPeXcl7YfjZqIqY6BpcPuP3QGXs"
+
+# 👑 ID-и админ
+ADMIN_IDS = [8377215874]
+
+# 📦 Маҳсулот
+ITEMS = {
+    1: {"name": "60 UC", "price": 10},
+    2: {"name": "325 UC", "price": 50},
+    3: {"name": "660 UC", "price": 100},
+    4: {"name": "1800 UC", "price": 250},
+    5: {"name": "3850 UC", "price": 500},
+    6: {"name": "8100 UC", "price": 1000},
+}
+
+# 📁 Маълумоти корбарон дар файл сабт мешавад
+USERS_FILE = "users.json"
+
+if os.path.exists(USERS_FILE):
+    with open(USERS_FILE, "r") as f:
+        users_data = json.load(f)
+else:
+    users_data = {}
+
+user_carts = {}
+user_wishlist = {}
+orders = []
+user_menu_messages = {}
+
+# ---------- Ёрдамчӣ ----------
+async def send_typing(chat, text):
+    await chat.send_action("typing")
+    await asyncio.sleep(0.3)
+    await chat.send_message(text)
+
+def save_users():
+    with open(USERS_FILE, "w") as f:
+        json.dump(users_data, f, indent=2)
+
+# ---------- Сабти ном ----------
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.message.from_user
+    user_id = str(user.id)
+
+    # Агар аллакай сабт шуда бошад → менюро нишон диҳ
+    if user_id in users_data:
+        chat = update.message.chat
+        await send_typing(chat, f"👋 Салом, {user.first_name}! Боз хайрамақдам!")
+        await show_main_menu(chat, user.id)
+        return
+
+    # Агар сабт нашуда бошад → тугмаи рақам фиристодан
+    contact_button = KeyboardButton("📱 Ворид шудан бо рақам", request_contact=True)
+    reply_markup = ReplyKeyboardMarkup([[contact_button]], resize_keyboard=True, one_time_keyboard=True)
+    await update.message.reply_text(
+        "🔐 Барои истифодаи бот рақами телефони худро фиристед:",
+        reply_markup=reply_markup
+    )
+
+# ---------- Гирифтани рақами телефон ----------
+async def get_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    contact = update.message.contact
+    user = update.message.from_user
+    user_id = str(user.id)
+
+    users_data[user_id] = {
+        "id": user.id,
+        "name": user.first_name,
+        "username": user.username,
+        "phone": contact.phone_number,
+        "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    save_users()
+
+    # Ба админ хабар додан
+    for admin in ADMIN_IDS:
+        await context.bot.send_message(
+            admin,
+            f"👤 Корбари нав сабт шуд!\n\n"
+            f"🧑 Ном: {user.first_name}\n"
+            f"📱 Рақам: {contact.phone_number}\n"
+            f"🔗 @{user.username or 'Ном надорад'}"
+        )
+
+    await update.message.reply_text(
+        "✅ Шумо бо муваффақият ворид шудед!",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    await show_main_menu(update.message.chat, user.id)
+
+# ---------- Менюи асосӣ ----------
+async def show_main_menu(chat, user_id):
+    buttons = [
+        [
+            InlineKeyboardButton("🛍 Каталог", callback_data="open_catalog"),
+            InlineKeyboardButton("❤️ Дилхоҳҳо", callback_data="open_wishlist"),
+        ],
+        [
+            InlineKeyboardButton("🛒 Сабад", callback_data="open_cart"),
+            InlineKeyboardButton("💬 Профили админ", url="tg://user?id=8377215874"),
+        ],
+        [InlineKeyboardButton("ℹ Маълумот", callback_data="info")],
+    ]
+    if user_id in ADMIN_IDS:
+        buttons.append([InlineKeyboardButton("👑 Панели админ", callback_data="admin_panel")])
+
+    msg = await chat.send_message(
+        "Менюи асосӣ:",
+        reply_markup=InlineKeyboardMarkup(buttons),
+        disable_notification=True
+    )
+    user_menu_messages[user_id] = msg
+
+# ---------- Callback кнопкаҳо ----------
+async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+    data = query.data
+
+    if data == "open_catalog":
+        await catalog(query)
+    elif data == "open_cart":
+        await cart(query)
+    elif data == "open_wishlist":
+        await open_wishlist(query)
+    elif data == "checkout":
+        await checkout(query, context)
+    elif data == "clear_cart":
+        user_carts[user_id] = {}
+        await query.message.reply_text("🧹 Сабад тоза шуд!")
+    elif data == "info":
+        await query.message.reply_text("ℹ Jazz Store — мағозаи расмии Jazz 🎷")
+    elif data == "admin_panel":
+        await admin_panel(query)
+    elif data == "admin_users":
+        await show_all_users(query)
+    elif data == "back_main":
+        await show_main_menu(query.message.chat, user_id)
+
+# ---------- Каталог ----------
+async def catalog(query):
+    buttons = [
+        [InlineKeyboardButton("60 UC — 10 TJS", callback_data="add_1"),
+         InlineKeyboardButton("325 UC — 50 TJS", callback_data="add_2")],
+        [InlineKeyboardButton("660 UC — 100 TJS", callback_data="add_3"),
+         InlineKeyboardButton("1800 UC — 250 TJS", callback_data="add_4")],
+        [InlineKeyboardButton("3850 UC — 500 TJS", callback_data="add_5"),
+         InlineKeyboardButton("8100 UC — 1000 TJS", callback_data="add_6")],
+        [InlineKeyboardButton("⬅️ Бозгашт", callback_data="back_main")],
+    ]
+    await query.message.edit_text("🛍 Каталог:", reply_markup=InlineKeyboardMarkup(buttons))
+
+# ---------- Сабад ----------
+async def cart(query):
+    user_id = query.from_user.id
+    cart = user_carts.get(user_id, {})
+    if not cart:
+        await query.message.reply_text("🛒 Сабад холист.")
+        return
+    text = "🛍 Маҳсулоти шумо:\n"
+    total = 0
+    for i, qty in cart.items():
+        subtotal = ITEMS[i]["price"] * qty
+        total += subtotal
+        text += f"- {ITEMS[i]['name']} x{qty} = {subtotal} TJS\n"
+    text += f"\n💰 Ҳамагӣ: {total} TJS"
+    buttons = [
+        [InlineKeyboardButton("📦 Фармоиш додан", callback_data="checkout"),
+         InlineKeyboardButton("🗑️ Пок кардан", callback_data="clear_cart")],
+        [InlineKeyboardButton("⬅️ Бозгашт", callback_data="back_main")],
+    ]
+    await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+
+# ---------- Фармоиш ----------
+async def checkout(query, context):
+    user = query.from_user
+    user_id = user.id
+    cart = user_carts.get(user_id, {})
+    if not cart:
+        await query.message.reply_text("🛒 Сабад холист.")
+        return
+
+    total = sum(ITEMS[i]["price"] * q for i, q in cart.items())
+    order_id = random.randint(10000, 99999)
+    order_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    orders.append({"id": order_id, "user": user.username, "total": total, "time": order_time})
+    for admin in ADMIN_IDS:
+        await context.bot.send_message(
+            admin, f"📦 Фармоиши нав №{order_id} аз @{user.username}\n💰 {total} TJS"
+        )
+    await query.message.reply_text(f"✅ Фармоиши шумо №{order_id} қабул шуд!")
+    user_carts[user_id] = {}
+
+# ---------- Панели админ ----------
+async def admin_panel(query):
+    buttons = [
+        [InlineKeyboardButton("📦 Фармоишҳо", callback_data="admin_orders"),
+         InlineKeyboardButton("📋 Рӯйхати корбарон", callback_data="admin_users")],
+        [InlineKeyboardButton("⬅️ Бозгашт", callback_data="back_main")],
+    ]
+    await query.message.edit_text("👑 Панели админ:", reply_markup=InlineKeyboardMarkup(buttons))
+
+# ---------- Намоиши корбарон ----------
+async def show_all_users(query):
+    if not users_data:
+        await query.message.reply_text("🚫 Ҳоло ягон корбар нест.")
+        return
+    text = "📋 **Рӯйхати корбарон:**\n\n"
+    for u in users_data.values():
+        text += f"👤 {u['name']} — {u['phone']}\n"
+    await query.message.reply_text(text)
+
+# ---------- Ботро оғоз кардан ----------
+def main():
+    app = ApplicationBuilder().token(TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(buttons))
+    app.add_handler(MessageHandler(filters.CONTACT, get_contact))
+    print("✅ Jazz Store бо сабти рақам фаъол шуд!")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
