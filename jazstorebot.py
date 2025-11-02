@@ -1,234 +1,137 @@
+import os
+import asyncio
+import subprocess
 from telegram import (
-    Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
+    Update,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
 )
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, CallbackQueryHandler,
-    MessageHandler, ContextTypes, filters
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters,
 )
-import asyncio, random, datetime, json, os
 
-# 🔒 TOKEN-и худро гузоред
-TOKEN = "8238563485:AAHNLTZodPeXcl7YfjZqIqY6BpcPuP3QGXs"
+# ====== 🔧 ТАНЗИМ ======
+BOT_TOKEN = "8550449462:AAHozKMKDtayXrK5XuADce-miEM_RAHszyw"
+DOWNLOAD_DIR = "downloads"
+os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-# 👑 ID-и админ
-ADMIN_IDS = [8377215874]
+SUPPORTED_FORMATS = ["mp4", "avi", "mkv", "mov", "flv", "ts", "webm"]
 
-# 📦 Маҳсулот
-ITEMS = {
-    1: {"name": "60 UC", "price": 10},
-    2: {"name": "325 UC", "price": 50},
-    3: {"name": "660 UC", "price": 100},
-    4: {"name": "1800 UC", "price": 250},
-    5: {"name": "3850 UC", "price": 500},
-    6: {"name": "8100 UC", "price": 1000},
-}
+# ====== 🚀 ФУНКСИЯҲО ======
 
-# 📁 Маълумоти корбарон дар файл сабт мешавад
-USERS_FILE = "users.json"
-
-if os.path.exists(USERS_FILE):
-    with open(USERS_FILE, "r") as f:
-        users_data = json.load(f)
-else:
-    users_data = {}
-
-user_carts = {}
-user_wishlist = {}
-orders = []
-user_menu_messages = {}
-
-# ---------- Ёрдамчӣ ----------
-async def send_typing(chat, text):
-    await chat.send_action("typing")
-    await asyncio.sleep(0.3)
-    await chat.send_message(text)
-
-def save_users():
-    with open(USERS_FILE, "w") as f:
-        json.dump(users_data, f, indent=2)
-
-# ---------- Сабти ном ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.message.from_user
-    user_id = str(user.id)
-
-    # Агар аллакай сабт шуда бошад → менюро нишон диҳ
-    if user_id in users_data:
-        chat = update.message.chat
-        await send_typing(chat, f"👋 Салом, {user.first_name}! Боз хайрамақдам!")
-        await show_main_menu(chat, user.id)
-        return
-
-    # Агар сабт нашуда бошад → тугмаи рақам фиристодан
-    contact_button = KeyboardButton("📱 Ворид шудан бо рақам", request_contact=True)
-    reply_markup = ReplyKeyboardMarkup([[contact_button]], resize_keyboard=True, one_time_keyboard=True)
-    await update.message.reply_text(
-        "🔐 Барои истифодаи бот рақами телефони худро фиристед:",
-        reply_markup=reply_markup
-    )
-
-# ---------- Гирифтани рақами телефон ----------
-async def get_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    contact = update.message.contact
-    user = update.message.from_user
-    user_id = str(user.id)
-
-    users_data[user_id] = {
-        "id": user.id,
-        "name": user.first_name,
-        "username": user.username,
-        "phone": contact.phone_number,
-        "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }
-    save_users()
-
-    # Ба админ хабар додан
-    for admin in ADMIN_IDS:
-        await context.bot.send_message(
-            admin,
-            f"👤 Корбари нав сабт шуд!\n\n"
-            f"🧑 Ном: {user.first_name}\n"
-            f"📱 Рақам: {contact.phone_number}\n"
-            f"🔗 @{user.username or 'Ном надорад'}"
-        )
-
-    await update.message.reply_text(
-        "✅ Шумо бо муваффақият ворид шудед!",
-        reply_markup=ReplyKeyboardRemove()
-    )
-    await show_main_menu(update.message.chat, user.id)
-
-# ---------- Менюи асосӣ ----------
-async def show_main_menu(chat, user_id):
-    buttons = [
-        [
-            InlineKeyboardButton("🛍 Каталог", callback_data="open_catalog"),
-            InlineKeyboardButton("❤️ Дилхоҳҳо", callback_data="open_wishlist"),
-        ],
-        [
-            InlineKeyboardButton("🛒 Сабад", callback_data="open_cart"),
-            InlineKeyboardButton("💬 Профили админ", url="tg://user?id=8377215874"),
-        ],
-        [InlineKeyboardButton("ℹ Маълумот", callback_data="info")],
+    keyboard = [
+        [InlineKeyboardButton("🎬 Табдил додани видео", callback_data="convert")],
+        [InlineKeyboardButton("ℹ️ Маълумот", callback_data="info")],
     ]
-    if user_id in ADMIN_IDS:
-        buttons.append([InlineKeyboardButton("👑 Панели админ", callback_data="admin_panel")])
-
-    msg = await chat.send_message(
-        "Менюи асосӣ:",
-        reply_markup=InlineKeyboardMarkup(buttons),
-        disable_notification=True
+    await update.message.reply_text(
+        "👋 Салом! Ман *Video Converter Bot* ҳастам.\n\n"
+        "🎥 Ман метавонам файлҳои видеоро ба форматҳои гуногун табдил диҳам.",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(keyboard),
     )
-    user_menu_messages[user_id] = msg
 
-# ---------- Callback кнопкаҳо ----------
-async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    user_id = query.from_user.id
-    data = query.data
 
-    if data == "open_catalog":
-        await catalog(query)
-    elif data == "open_cart":
-        await cart(query)
-    elif data == "open_wishlist":
-        await open_wishlist(query)
-    elif data == "checkout":
-        await checkout(query, context)
-    elif data == "clear_cart":
-        user_carts[user_id] = {}
-        await query.message.reply_text("🧹 Сабад тоза шуд!")
-    elif data == "info":
-        await query.message.reply_text("ℹ Jazz Store — мағозаи расмии Jazz 🎷")
-    elif data == "admin_panel":
-        await admin_panel(query)
-    elif data == "admin_users":
-        await show_all_users(query)
-    elif data == "back_main":
-        await show_main_menu(query.message.chat, user_id)
-
-# ---------- Каталог ----------
-async def catalog(query):
-    buttons = [
-        [InlineKeyboardButton("60 UC — 10 TJS", callback_data="add_1"),
-         InlineKeyboardButton("325 UC — 50 TJS", callback_data="add_2")],
-        [InlineKeyboardButton("660 UC — 100 TJS", callback_data="add_3"),
-         InlineKeyboardButton("1800 UC — 250 TJS", callback_data="add_4")],
-        [InlineKeyboardButton("3850 UC — 500 TJS", callback_data="add_5"),
-         InlineKeyboardButton("8100 UC — 1000 TJS", callback_data="add_6")],
-        [InlineKeyboardButton("⬅️ Бозгашт", callback_data="back_main")],
-    ]
-    await query.message.edit_text("🛍 Каталог:", reply_markup=InlineKeyboardMarkup(buttons))
-
-# ---------- Сабад ----------
-async def cart(query):
-    user_id = query.from_user.id
-    cart = user_carts.get(user_id, {})
-    if not cart:
-        await query.message.reply_text("🛒 Сабад холист.")
-        return
-    text = "🛍 Маҳсулоти шумо:\n"
-    total = 0
-    for i, qty in cart.items():
-        subtotal = ITEMS[i]["price"] * qty
-        total += subtotal
-        text += f"- {ITEMS[i]['name']} x{qty} = {subtotal} TJS\n"
-    text += f"\n💰 Ҳамагӣ: {total} TJS"
-    buttons = [
-        [InlineKeyboardButton("📦 Фармоиш додан", callback_data="checkout"),
-         InlineKeyboardButton("🗑️ Пок кардан", callback_data="clear_cart")],
-        [InlineKeyboardButton("⬅️ Бозгашт", callback_data="back_main")],
-    ]
-    await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-
-# ---------- Фармоиш ----------
-async def checkout(query, context):
-    user = query.from_user
-    user_id = user.id
-    cart = user_carts.get(user_id, {})
-    if not cart:
-        await query.message.reply_text("🛒 Сабад холист.")
-        return
-
-    total = sum(ITEMS[i]["price"] * q for i, q in cart.items())
-    order_id = random.randint(10000, 99999)
-    order_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    orders.append({"id": order_id, "user": user.username, "total": total, "time": order_time})
-    for admin in ADMIN_IDS:
-        await context.bot.send_message(
-            admin, f"📦 Фармоиши нав №{order_id} аз @{user.username}\n💰 {total} TJS"
+    if query.data == "convert":
+        await query.message.reply_text("📤 Лутфан видеоро фирист, ки мехоҳӣ табдил диҳам.")
+    elif query.data == "info":
+        await query.message.reply_text(
+            "ℹ️ *Маълумот дар бораи бот:*\n\n"
+            "🎯 Форматҳои дастгиришаванда:\n"
+            "`" + ", ".join(SUPPORTED_FORMATS).upper() + "`\n\n"
+            "💡 Танҳо видеоро фирист ва форматро интихоб кун.",
+            parse_mode="Markdown",
         )
-    await query.message.reply_text(f"✅ Фармоиши шумо №{order_id} қабул шуд!")
-    user_carts[user_id] = {}
 
-# ---------- Панели админ ----------
-async def admin_panel(query):
-    buttons = [
-        [InlineKeyboardButton("📦 Фармоишҳо", callback_data="admin_orders"),
-         InlineKeyboardButton("📋 Рӯйхати корбарон", callback_data="admin_users")],
-        [InlineKeyboardButton("⬅️ Бозгашт", callback_data="back_main")],
-    ]
-    await query.message.edit_text("👑 Панели админ:", reply_markup=InlineKeyboardMarkup(buttons))
 
-# ---------- Намоиши корбарон ----------
-async def show_all_users(query):
-    if not users_data:
-        await query.message.reply_text("🚫 Ҳоло ягон корбар нест.")
+async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    video = update.message.video or update.message.document
+    if not video:
+        await update.message.reply_text("😕 Файли видео ёфт нашуд.")
         return
-    text = "📋 **Рӯйхати корбарон:**\n\n"
-    for u in users_data.values():
-        text += f"👤 {u['name']} — {u['phone']}\n"
-    await query.message.reply_text(text)
 
-# ---------- Ботро оғоз кардан ----------
+    # Санҷиши андоза
+    if video.file_size > 100 * 1024 * 1024:
+        await update.message.reply_text("⚠️ Файл аз 100MB зиёд аст. Лутфан видеои хурдтар фирист.")
+        return
+
+    # Боргирӣ
+    msg = await update.message.reply_text("⬇️ Боргирии видео...")
+    file = await context.bot.get_file(video.file_id)
+    input_path = os.path.join(DOWNLOAD_DIR, video.file_name or "input_video")
+    await file.download_to_drive(input_path)
+    await msg.edit_text("✅ Видео боргирӣ шуд!")
+
+    # Менюи форматҳо
+    keyboard = [
+        [InlineKeyboardButton(fmt.upper(), callback_data=f"format_{fmt}")]
+        for fmt in SUPPORTED_FORMATS
+    ]
+    await update.message.reply_text(
+        f"🎞 Файли гирифташуда: `{os.path.basename(input_path)}`\n\n"
+        "Формати баромадро интихоб кун 👇",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+    context.user_data["input_path"] = input_path
+
+
+async def format_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    fmt = query.data.replace("format_", "")
+    input_path = context.user_data.get("input_path")
+
+    if not input_path or not os.path.exists(input_path):
+        await query.message.reply_text("❌ Файл ёфт нашуд. Аз аввал видеоро фирист.")
+        return
+
+    output_path = os.path.splitext(input_path)[0] + f".{fmt}"
+
+    msg = await query.message.reply_text(f"⚙️ Табдилдиҳӣ оғоз шуд ба формат `{fmt.upper()}` ...", parse_mode="Markdown")
+
+    # Иҷрои FFmpeg
+    cmd = [
+        "ffmpeg", "-y", "-i", input_path,
+        "-c:v", "libx264", "-preset", "fast",
+        "-c:a", "aac", "-b:a", "128k", output_path,
+    ]
+
+    process = await asyncio.create_subprocess_exec(
+        *cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
+    _, stderr = await process.communicate()
+
+    if process.returncode == 0 and os.path.exists(output_path):
+        await msg.edit_text("✅ Табдилдиҳӣ анҷом ёфт! Файли тайёр ⬇️")
+        await query.message.reply_video(video=open(output_path, "rb"))
+        os.remove(input_path)
+        os.remove(output_path)
+    else:
+        await msg.edit_text(
+            "⚠️ Хатогӣ ҳангоми табдилдиҳӣ:\n\n"
+            f"```\n{stderr.decode()[-400:]}\n```",
+            parse_mode="Markdown",
+        )
+
+# ====== 🔄 ОҒОЗИ БОТ ======
+
 def main():
-    app = ApplicationBuilder().token(TOKEN).build()
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(buttons))
-    app.add_handler(MessageHandler(filters.CONTACT, get_contact))
-    print("✅ Jazz Store бо сабти рақам фаъол шуд!")
+    app.add_handler(CallbackQueryHandler(button_handler, pattern="^(convert|info)$"))
+    app.add_handler(CallbackQueryHandler(format_selected, pattern="^format_"))
+    app.add_handler(MessageHandler(filters.VIDEO | filters.Document.VIDEO, handle_video))
+    print("🤖 Бот фаъол шуд!")
     app.run_polling()
 
 if __name__ == "__main__":
