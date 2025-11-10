@@ -1,138 +1,141 @@
-import os
-import asyncio
-import subprocess
-from telegram import (
-    Update,
-    InlineKeyboardMarkup,
-    InlineKeyboardButton,
-)
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    CallbackQueryHandler,
-    ContextTypes,
-    filters,
-)
+from telegram import InlineKeyboardMarkup, InlineKeyboardButton, Update
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
-# ====== 🔧 ТАНЗИМ ======
-BOT_TOKEN = "8550449462:AAHozKMKDtayXrK5XuADce-miEM_RAHszyw"
-DOWNLOAD_DIR = "downloads"
-os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+# ===========================
+#       BOOK DATA (TEXT)
+# ===========================
 
-SUPPORTED_FORMATS = ["mp4", "avi", "mkv", "mov", "flv", "ts", "webm"]
+# Дар ин ҷо матни китобҳоро ворид мекунед.
+# Барои мисол, ман дар ҳар синф "Саҳифаи X" навиштам.
+# Шумо метавонед ба ҷои он матни китобро гузоред.
 
-# ====== 🚀 ФУНКСИЯҲО ======
+books = {
+    "class5": {
+        "title": "Адабиёти синфи 5",
+        "pages": ["АДАБИЁТИ ШИФОҲИ ФАРҚИ АДАБИЁТИ ШИФОҲИ АЗ КИТОБИ Адабиёти бадей асосан ду навъ мешавад: а) адабиёти шифоҳӣ; б) адабиёти китобӣ. Дар чомеа аввал адабиёти шифоҳӣ, яъне фолклор замонҳое, ки ҳанӯз хат вучуд надошт, пайдо шуда буд. Одамон гаму шодӣ, орзую омоли хешро даҳонӣ, бадоҳатан дар наклу ривоятҳо, афсонаю асотирҳо, суруду таронаҳо баён мекарданд. Ин гуфтаҳо аз авлод ба авлод, аз насл ба насл, аз аср ба аср гузашта такмил меёфтанд ва оҳиста-оҳиста жанру намудхои адабиёти шифоҳӣ шакл мегирифтанд. Баробари пайдоиши хат адабиёти китобӣ ҳам оғоз меёбад. Ва ашхоси босавод адабиёти шифохиро ҷамъ намуда ба шакли китоб омода месозанд. Бештари асарҳои халкӣ бо ҳамин роху восита то замони мо омада расидаанд. Адабиёти шифоҳӣ моли халқ аст. Яъне, сохиби наклу ривоят, афсона, суруду таронаҳо мову шумо ҳастем. Имрӯз низ халқ асар эҷод мекунад ва эҷодиёти онҳо дар маҷмӯаҳои дастҷамъй ба табъ мерасанд. Адабиёти китобӣ эҷоди ашхоси муайянанд, ки дар замону макони мушаххас зиндагӣ карда, асар эчод намудаанд. Масалан, устод Рӯдакиро гирем. У дар соли 858 ба дунё омада, соли 941 вафот кардааст. Ва ў қасидаи "Шикоят аз пири", "Модари май" ва асарҳои дигарро офаридааст. Ин андешаро нисбати Восеъ ва нақлу ривоят ва суруду таронаҳое, ки дар ҳаққи ў гуфта шудаанд, баён карда наметавонем. Зеро наклу ривоят ва суруду таронаҳоро шахсони номаълум, яъне халқ эъҷод кардааст. Адабиёти шифоҳӣ аз лиҳози забон ва тарзи баён ҳам аз адабиёти китобӣ фарқ мекунад. Забони асарҳои халкӣ сода, фаҳмо буда, мардум онро зуд қабул мекунанд. Ибораорой, истифодаи калимаю ибораҳои душворфаҳм ва бегона дар онҳо дида намешавад, вале дар адабиёти китобӣ зиёдтар ба назар мерасад. "]
+    },
+    "class6": {
+        "title": "Адабиёти синфи 6",
+        "pages": ["Саҳифаи 1 " ]
+    },
+    "class7": {
+        "title": "Адабиёти синфи 7",
+        "pages": ["Саҳифаи " + str(i) for i in range(1, 4001)]
+    },
+    "class8": {
+        "title": "Адабиёти синфи 8",
+        "pages": ["Саҳифаи " + str(i) for i in range(1, 4001)]
+    },
+    "class9": {
+        "title": "Адабиёти синфи 9",
+        "pages": ["Саҳифаи " + str(i) for i in range(1, 4001)]
+    },
+    "class10": {
+        "title": "Адабиёти синфи 10",
+        "pages": ["Саҳифаи " + str(i) for i in range(1, 4001)]
+    },
+    "class11": {
+        "title": "Адабиёти синфи 11",
+        "pages": ["Саҳифаи " + str(i) for i in range(1, 4001)]
+    }
+}
+
+# ===========================
+#       START MENU
+# ===========================
+
+def get_main_menu():
+    keyboard = [
+        [InlineKeyboardButton("📘 Синфи 5", callback_data="open_class5")],
+        [InlineKeyboardButton("📘 Синфи 6", callback_data="open_class6")],
+        [InlineKeyboardButton("📘 Синфи 7", callback_data="open_class7")],
+        [InlineKeyboardButton("📘 Синфи 8", callback_data="open_class8")],
+        [InlineKeyboardButton("📘 Синфи 9", callback_data="open_class9")],
+        [InlineKeyboardButton("📘 Синфи 10", callback_data="open_class10")],
+        [InlineKeyboardButton("📘 Синфи 11", callback_data="open_class11")],
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [InlineKeyboardButton("🎬 Табдил додани видео", callback_data="convert")],
-        [InlineKeyboardButton("ℹ️ Маълумот", callback_data="info")],
-    ]
     await update.message.reply_text(
-        "👋 Салом! Ман *Video Converter Bot* ҳастам.\n\n"
-        "🎥 Ман метавонам файлҳои видеоро ба форматҳои гуногун табдил диҳам.",
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        "📚 *Китобхонаи электронӣ*\nСинфи худро интихоб кунед:",
+        reply_markup=get_main_menu(),
+        parse_mode="Markdown"
     )
 
+# ===========================
+#       PAGE HANDLER
+# ===========================
 
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def open_book(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    if query.data == "convert":
-        await query.message.reply_text("📤 Лутфан видеоро фирист, ки мехоҳӣ табдил диҳам.")
-    elif query.data == "info":
-        await query.message.reply_text(
-            "ℹ️ *Маълумот дар бораи бот:*\n\n"
-            "🎯 Форматҳои дастгиришаванда:\n"
-            "`" + ", ".join(SUPPORTED_FORMATS).upper() + "`\n\n"
-            "💡 Танҳо видеоро фирист ва форматро интихоб кун.",
-            parse_mode="Markdown",
+    book_id = query.data.replace("open_", "")
+    context.user_data["book_id"] = book_id
+    context.user_data["page"] = 0
+
+    await show_page(query, context)
+
+
+async def show_page(query, context):
+    book_id = context.user_data["book_id"]
+    page = context.user_data["page"]
+
+    book = books[book_id]
+    total_pages = len(book["pages"])
+
+    text = f"📖 *{book['title']}*\n\n"
+    text += book["pages"][page]
+
+    keyboard = [
+        [
+            InlineKeyboardButton("⬅️", callback_data="prev") if page > 0 else InlineKeyboardButton(" ", callback_data="none"),
+            InlineKeyboardButton(f"{page+1}/{total_pages}", callback_data="none"),
+            InlineKeyboardButton("➡️", callback_data="next") if page < total_pages - 1 else InlineKeyboardButton(" ", callback_data="none")
+        ],
+        [InlineKeyboardButton("🔙 Бозгашт", callback_data="back_to_menu")]
+    ]
+
+    await query.edit_message_text(
+        text=text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
+
+# ===========================
+#    CALLBACKS FOR BUTTONS
+# ===========================
+
+async def callback_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "next":
+        context.user_data["page"] += 1
+        await show_page(query, context)
+    elif query.data == "prev":
+        context.user_data["page"] -= 1
+        await show_page(query, context)
+    elif query.data == "back_to_menu":
+        await query.edit_message_text(
+            "📚 *Китобхонаи электронӣ*\nСинфи худро интихоб кунед:",
+            reply_markup=get_main_menu(),
+            parse_mode="Markdown"
         )
-
-
-async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    video = update.message.video or update.message.document
-    if not video:
-        await update.message.reply_text("😕 Файли видео ёфт нашуд.")
-        return
-
-    # Санҷиши андоза
-    if video.file_size > 100 * 1024 * 1024:
-        await update.message.reply_text("⚠️ Файл аз 100MB зиёд аст. Лутфан видеои хурдтар фирист.")
-        return
-
-    # Боргирӣ
-    msg = await update.message.reply_text("⬇️ Боргирии видео...")
-    file = await context.bot.get_file(video.file_id)
-    input_path = os.path.join(DOWNLOAD_DIR, video.file_name or "input_video")
-    await file.download_to_drive(input_path)
-    await msg.edit_text("✅ Видео боргирӣ шуд!")
-
-    # Менюи форматҳо
-    keyboard = [
-        [InlineKeyboardButton(fmt.upper(), callback_data=f"format_{fmt}")]
-        for fmt in SUPPORTED_FORMATS
-    ]
-    await update.message.reply_text(
-        f"🎞 Файли гирифташуда: `{os.path.basename(input_path)}`\n\n"
-        "Формати баромадро интихоб кун 👇",
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-    )
-    context.user_data["input_path"] = input_path
-
-
-async def format_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    fmt = query.data.replace("format_", "")
-    input_path = context.user_data.get("input_path")
-
-    if not input_path or not os.path.exists(input_path):
-        await query.message.reply_text("❌ Файл ёфт нашуд. Аз аввал видеоро фирист.")
-        return
-
-    output_path = os.path.splitext(input_path)[0] + f".{fmt}"
-
-    msg = await query.message.reply_text(f"⚙️ Табдилдиҳӣ оғоз шуд ба формат `{fmt.upper()}` ...", parse_mode="Markdown")
-
-    # Иҷрои FFmpeg
-    cmd = [
-        "ffmpeg", "-y", "-i", input_path,
-        "-c:v", "libx264", "-preset", "fast",
-        "-c:a", "aac", "-b:a", "128k", output_path,
-    ]
-
-    process = await asyncio.create_subprocess_exec(
-        *cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-    )
-    _, stderr = await process.communicate()
-
-    if process.returncode == 0 and os.path.exists(output_path):
-        await msg.edit_text("✅ Табдилдиҳӣ анҷом ёфт! Файли тайёр ⬇️")
-        await query.message.reply_video(video=open(output_path, "rb"))
-        os.remove(input_path)
-        os.remove(output_path)
     else:
-        await msg.edit_text(
-            "⚠️ Хатогӣ ҳангоми табдилдиҳӣ:\n\n"
-            f"```\n{stderr.decode()[-400:]}\n```",
-            parse_mode="Markdown",
-        )
+        await open_book(update, context)
 
-# ====== 🔄 ОҒОЗИ БОТ ======
+# ===========================
+#        BOT RUN
+# ===========================
 
-def main():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button_handler, pattern="^(convert|info)$"))
-    app.add_handler(CallbackQueryHandler(format_selected, pattern="^format_"))
-    app.add_handler(MessageHandler(filters.VIDEO | filters.Document.VIDEO, handle_video))
-    print("🤖 Бот фаъол шуд!")
-    app.run_polling()
+TOKEN = "8280566276:AAHQjwIexpzVqeBVKpZZPdZvKFhYEu4-EN0"  # TOKEN-и худро гузоред
 
-if __name__ == "__main__":
-    main()
+app = Application.builder().token(TOKEN).build()
+
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CallbackQueryHandler(callback_buttons))
+
+app.run_polling()
